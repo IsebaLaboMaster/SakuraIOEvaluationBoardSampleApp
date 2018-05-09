@@ -1,0 +1,255 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>GNSSモジュール サンプル</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #map {
+            height: 600px;
+            width: 800px;
+        }
+    </style>
+</head>
+<body>
+<script>
+    // WebSocketオブジェクト
+    var ws = null;
+    
+    // 接続先URI
+    var uri = "";
+    var module_id = "";
+    
+    //WebSocket接続処理はここから
+    function wsbox(){
+      var u_str=document.math.socket.value;
+      var m_str=document.math.module.value;
+      alert("接続先URL:"+u_str+"\nモジュールID:"+m_str);
+      uri=u_str;
+      module_id=m_str;
+    }
+    
+    // 接続
+    function open() {
+        wsbox();
+        if (ws == null || ws.readyState != 1) {
+            // ws の初期化
+            ws = new WebSocket(uri);
+            // イベントハンドラの設定
+            ws.onopen = onOpen;
+            ws.onmessage = onMessage;
+            ws.onclose = onClose;
+            ws.onerror = onError;
+        }
+    }
+    
+    // メッセージ受信イベント
+    function onMessage(event) {
+        output(event.data);
+    }
+
+    // 接続イベント
+    function onOpen(event) {
+        
+    }
+    
+    // エラーイベント
+    function onError(event) {
+        document.getElementById('status').innerHTML='Error';
+    }
+
+    // 切断イベント
+    function onClose() {
+        ws.close();
+        ws = null;
+        document.getElementById('status').innerHTML='Close';
+        alert("切断しました");
+    }
+    
+    // WebSocket接続関数
+    function WSOpen() {
+        if(ws != null)
+        {
+            ws.close();
+            return;
+        }
+        setTimeout("open()", 0);
+        document.getElementById('status').innerHTML='Open';
+    }
+    
+    function SendModule(order) {
+	    if(ws==null)
+	    {
+	        alert("ws=null");
+	        return;//wsがnullなら処理を抜ける
+	    }
+	    
+	    var buf=order;
+	    
+	    var OrderText;
+	    
+	    switch(buf)
+	    {
+	        case 1:
+	            OrderText="Web>モジュールに報告要請"
+	        break;
+	        
+	        default:
+	        break;
+	    }
+              
+        //Web画面に送信ログ表示する。
+        document.getElementById("messagelog").innerHTML = OrderText +" "+new Date().toLocaleString()+ "</br>";
+                                        
+        //JSON送信
+        const obj = 
+        {
+	        module: module_id ,
+	        type: 'channels',
+	        datetime: new Date().toISOString(),
+	        payload:{
+	                    channels: [{channel: 0, type: 'i', value:buf}]
+	                }
+	    };
+	    ws.send(JSON.stringify(obj));
+	}
+	
+    // 受信したメッセージを出力する処理
+    function output(str) {
+    
+        var MessageText;
+        var sakuraioPoint;
+        var Temperature;
+        
+        var longitude;//経度
+        var latitude;//緯度
+        var unixtime;//UNIX時間
+     
+        var contact = JSON.parse(str);
+        var now=new Date(contact.payload.channels[0].datetime);
+        
+        MessageText="EVBボード>現在のGPS値です。"
+        
+        sakuraioPoint=contact.payload.channels[0].value;//sakuraIOポイント
+        longitude=contact.payload.channels[1].value;//経度
+        latitude=contact.payload.channels[2].value;//緯度
+        unixtime=contact.payload.channels[3].value;//UNIX時間
+       
+        var selectElement = document.getElementById("history");
+        var history = selectElement.value;
+        
+        switch(history)
+        {
+            case "無効":
+                marker.setMap(null);
+            break;
+            
+            case "有効":
+            break;
+            
+            default:
+                 marker.setMap(null);
+            break;
+        }
+        
+        myLatLng = {lat: latitude, lng: longitude};
+        map.panTo(new google.maps.LatLng(myLatLng));
+        marker = new google.maps.Marker({position: myLatLng,map: map});
+        
+        document.getElementById("messagelog").innerHTML='<font color="#4169e1">'+MessageText+"  "+
+                                                     "更新時刻(JST)：" + new Date().toLocaleString() +　"   更新時刻(UTC)：" + new Date().toISOString()+ "<br />" +
+                                                     "経度=" + longitude + ", 緯度="  + latitude + ", UNIX時間=" + unixtime+", sakura.ioポイント=" + sakuraioPoint+"</font>"
+    }
+</script>
+
+
+    WebSocket 接続状態 : <span id="status">Wait</span>
+    <form name="math">
+    URL <input type="text" size="80" name="socket" value="" />
+    module <input type="text" size="20" name="module" value="" /><br />
+    
+    <input type="button" value="接続" onclick="WSOpen()" />
+    <input type="button" value="切断" onclick="onClose()" />
+    <input type="button" value="現在位置" onclick="SendModule(1)" />
+    <input type="button" value="東京" onclick="toTokyo()" />
+    <input type="button" value="新橋" onclick="toShinbashi()" />
+    <input type="button" value="品川" onclick="toShinagawa()" />
+    <input type="button" value="札幌テレビ塔" onclick="toSapporo()" />
+    
+    移動軌跡
+    <select id="history" name="history_enable">
+    <option value="無効" selected>無効</option>
+	<option value="有効">有効</option>
+    </select>
+    
+    <div id="messagelog"></div>
+    </form>
+    <hr />
+    
+    <div id="map"></div>
+    <script>
+        var map;
+        var marker;
+        var myLatLng = {lat: 43.061093, lng: 141.356418};
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 14,
+                center: myLatLng
+            });
+
+            marker = new google.maps.Marker({
+                position: myLatLng,
+                map: map
+            });
+        }
+        
+        function toTokyo() {
+          marker.setMap(null);
+          myLatLng = {lat: 35.680865, lng: 139.767036};
+          map.panTo(new google.maps.LatLng(myLatLng));
+          marker = new google.maps.Marker({
+                position: myLatLng,
+                map: map
+          });
+        }
+
+        function toShinbashi() {
+          marker.setMap(null);
+          myLatLng = {lat: 35.666397, lng: 139.758153};
+          map.panTo(new google.maps.LatLng(myLatLng));
+          marker = new google.maps.Marker({
+                position: myLatLng,
+                map: map
+          });
+        }
+
+        function toShinagawa() {
+          marker.setMap(null);
+        　myLatLng = {lat: 35.629867, lng: 139.74015};
+          map.panTo(new google.maps.LatLng(myLatLng));
+          marker = new google.maps.Marker({
+                position: myLatLng,
+                map: map
+          });
+        }
+        
+        function toSapporo() {
+          marker.setMap(null);
+        　myLatLng = {lat: 43.061093, lng: 141.356418};
+          map.panTo(new google.maps.LatLng(myLatLng));
+          marker = new google.maps.Marker({
+                position: myLatLng,
+                map: map
+          });
+        }
+        initMap();
+    </script>
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=/*ここにGoogleMapをJavaScriptで使うためのAPIキーを入力*/&callback=initMap">initMap()</script>
+</body>
+</html>
