@@ -108,7 +108,7 @@ APIキーを取得したらそれをソースコードに記述する必要が�
 
 # ―「index.html」使用前の準備について―  
 ブラウザに表示させたMMDモデルを検証用ボードに連動させて動かす、というアプリケーションですがMMDモデルデータは同梱していないので  
-**edvakf様「MMD.js」**: <https://github.com/edvakf/MMD.js> 
+**edvakf様「MMD.js」**: <https://github.com/edvakf/MMD.js>  
 にて公開されているファイル群のうち「model」フォルダ内のデータが必要です。
 
 ・上記リンクからデータを一式ダウンロードする。(ZIP形式でローカルに保存)  
