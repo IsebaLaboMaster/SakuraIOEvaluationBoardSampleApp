@@ -7,7 +7,7 @@
 
 
 # ―ライセンスについて―  
-このソフトウェアはMITライセンスのもとで公開されます。詳細は「LICENSE」を参照願います。  　
+このソフトウェアはMITライセンスのもとで公開されます。詳細は「LICENSE」を参照願います。  
 （This software is released under the MIT License, see LICENSE.）
 
 # ―お借りしたライブラリについて―
