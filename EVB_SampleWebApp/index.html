@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+
+<title>MMD on WebGL</title>
+<script type="text/javascript" charset="utf-8" src="libs/gl-matrix.js"></script>
+<script type="text/javascript" charset="utf-8" src="libs/glMatrixUtils.js"></script>
+<script type="text/javascript" charset="utf-8" src="libs/sjis.js"></script>
+<script type="text/javascript" charset="utf-8" src="MMD.js"></script>
+<script type="text/javascript" charset="utf-8" src="main.js"></script>
+
+<script>
+
+
+ // WebSocketオブジェクト
+    var ws = null;
+    
+    // 接続先URI
+    var uri = "";
+    
+    //WebSocket接続処理はここから
+    function wsbox(){
+      var u_str=document.math.socket.value;
+      alert("接続先URL:"+u_str);
+      uri=u_str;
+    }
+    
+    // 接続
+    function open() {
+        wsbox();
+        if (ws == null || ws.readyState != 1) {
+            // ws の初期化
+            ws = new WebSocket(uri);
+            // イベントハンドラの設定
+            ws.onopen = onOpen;
+            ws.onmessage = onMessage;
+            ws.onclose = onClose;
+            ws.onerror = onError;
+        }
+    }
+    
+    // メッセージ受信イベント
+    function onMessage(event) {
+        output(event.data);
+    }
+
+    // 接続イベント
+    function onOpen(event) {
+        SendModule(1);
+    }
+    
+    // エラーイベント
+    function onError(event) {
+        document.getElementById('status').innerHTML='Error';
+    }
+
+    // 切断イベント
+    function onClose() {
+        ws.close();
+        ws = null;
+        document.getElementById('status').innerHTML='Close';
+        alert("切断しました");
+    }
+    
+    // WebSocket接続関数
+    function WSOpen() {
+        if(ws != null)
+        {
+            ws.close();
+            return;
+        }
+        setTimeout("open()", 0);
+        document.getElementById('status').innerHTML='Open';
+    }
+    
+    
+    // 受信したメッセージを出力する処理
+    function output(str) {
+    
+        var MessageText;
+        var sakuraioPoint;
+        var Temperature;
+        
+        var accelerometer_dataX;
+        var accelerometer_dataY;
+        var accelerometer_dataZ;
+        var gyroscope_dataX;
+        var gyroscope_dataY;
+        var gyroscope_dataZ;
+        var MagnetometerX;
+        var MagnetometerY;
+        var MagnetometerZ;
+     
+        var contact = JSON.parse(str);
+        var now=new Date(contact.payload.channels[0].datetime);
+        
+        MessageText="EVBボード>現在の値です。"
+        
+        sakuraioPoint=contact.payload.channels[0].value;//sakuraIOポイント
+        Temperature=contact.payload.channels[1].value;//温度
+        accelerometer_dataX=contact.payload.channels[2].value;//加速度X軸
+        accelerometer_dataY=contact.payload.channels[3].value;//加速度Y軸
+        accelerometer_dataZ=contact.payload.channels[4].value;//加速度Z軸
+        gyroscope_dataX=contact.payload.channels[5].value;//ジャイロX軸
+        gyroscope_dataY=contact.payload.channels[6].value;//ジャイロY軸
+        gyroscope_dataZ=contact.payload.channels[7].value;//ジャイロZ軸
+        MagnetometerX=contact.payload.channels[8].value;//コンパスX軸
+        MagnetometerY=contact.payload.channels[9].value;//コンパスY軸
+        MagnetometerZ=contact.payload.channels[10].value;//コンパスZ軸
+        
+        document.getElementById("messagelog").innerHTML='<font color="#4169e1">'+MessageText+"  "+
+                                                     "更新時刻(JST)：" + new Date().toLocaleString() +　"   更新時刻(UTC)：" + new Date().toISOString()+ "<br />" +
+                                                     "加速度(" + accelerometer_dataX.toFixed(2) + ","  + accelerometer_dataY.toFixed(2) + "," + accelerometer_dataZ.toFixed(2) + ")　" +
+                                                     "ジャイロ(" + gyroscope_dataX.toFixed(2) + "," + gyroscope_dataY.toFixed(2) + "," + gyroscope_dataZ.toFixed(2) + ")　" +
+                                                     "コンパス(" + MagnetometerX.toFixed(2) + "," + MagnetometerY.toFixed(2) + "," + MagnetometerZ.toFixed(2) +")"+"</font>"
+                                                     
+        /*
+        document.getElementById("messagelog").innerHTML='<font color="#4169e1">'+MessageText+"<br/>"+
+                                                     "更新時刻(JST)：" + new Date().toLocaleString() +　"   更新時刻(UTC)：" + new Date().toISOString()+ "<br />" +
+                                                     "加速度X=" + accelerometer_dataX.toFixed(2) + "　" +"加速度Y=" + accelerometer_dataY.toFixed(2) + "　" +"加速度Z=" + accelerometer_dataZ.toFixed(2) + "<br />" + 
+                                                     "ジャイロX=" + gyroscope_dataX.toFixed(2) + "　" +"ジャイロY=" + gyroscope_dataY.toFixed(2) + "　" +"ジャイロZ=" + gyroscope_dataZ.toFixed(2) + "<br />" + 
+                                                     "コンパスX=" + MagnetometerX.toFixed(2) + "　" +"コンパスY=" + MagnetometerY.toFixed(2) + "　" +"コンパスZ=" + MagnetometerZ.toFixed(2) +"</font>"+ "<br />" + 
+                                                     document.getElementById("messagelog").innerHTML;*/
+          
+        mmd.EVBMove(gyroscope_dataX,gyroscope_dataZ);
+    }
+
+
+</script>
+
+<header>
+    WebSocket 接続状態 : <span id="status">Wait</span>
+    <form name="math">
+    URL <input type="text" size="80" name="socket" value="" /></br>
+    
+    <input type="button" value="接続" onclick="WSOpen()" />
+    <input type="button" value="切断" onclick="onClose()" />
+    
+    <input type="button" value="X軸回転+" onclick="mmd.EVBMoveX(-1)" />
+    <input type="button" value="X軸回転-" onclick="mmd.EVBMoveX(1)" />
+    <input type="button" value="Z軸回転+" onclick="mmd.EVBMoveZ(-1)" />
+    <input type="button" value="Z軸回転-" onclick="mmd.EVBMoveZ(1)" />
+    <input type="button" value="初期位置" onclick="mmd.EVBMoveDefault()" />
+    
+    <div id="messagelog"></div>
+    </form>
+    <hr />
+   
+  <h1>MMD on WebGL <span style="font-size: small">(<a href="https://github.com/edvakf/MMD.js">View source</a>)</span></h1>
+  <ul>
+    <li><strong>Left/Right/Up/Down keys</strong> or <strong>Mouse drag</strong>: View angle
+    <li><strong>Shift+Left/Right/Up/Down keys</strong> or <strong>Shift+Mouse drag</strong>: Center position
+    <li><strong>PageUp/PageDown keys</strong> or <strong>Mouse wheel</strong>: Distance
+    <li><strong>Home key</strong>: Back to default position
+    <li><strong>Space key</strong>: Play/Pause
+  </ul>
+  
+  
+</header>
