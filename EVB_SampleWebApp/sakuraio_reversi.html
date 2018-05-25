@@ -1,0 +1,834 @@
+﻿<html>
+  <head>
+    <title>sakura.io リバーシWeb</title>
+    
+    <script type="text/javascript">
+    //プログラムはここから
+    
+    //グローバル変数定義
+    var g_Debug = new Boolean(false);//ページ下部に通信ログを表示させたい場合trueにする(デバッグ用)
+    
+    var g_GameEnd = new Boolean(false);//ゲームが終了かどうか判定 falseなら続行　trueなら終了
+    var g_CANVAS_W=800;//キャンバスサイズ幅
+    var g_CANVAS_H=600;//キャンバスサイズ高さ
+    var g_MiniPieceSIZE_W=30;//mini_black.png幅
+    var g_MiniPieceSIZE_H=5;//mini_black.png高さ
+    var g_TurnSIZE_W=103;//turn.png幅
+    var g_TurnSIZE_H=42;//turn.png高さ
+    var g_GaugeSIZE_W=16;//gauge.png幅
+    var g_GaugeSIZE_H=450;//gauge.png高さ
+    var g_BOARD_SIZE=480;//盤の幅・高さ
+    
+    var OffSetX=(g_CANVAS_W-g_BOARD_SIZE)/2-100;//キャンバス左端から何px空白を空けるか
+    var OffSetY=(g_CANVAS_H-g_BOARD_SIZE)/2;//キャンバス上端から何px空白を空けるか
+    var PieceSIZE=g_BOARD_SIZE/8;//コマのサイズ
+    
+    var g_context;
+    var g_canvas;
+    var g_mousePos;//マウスの位置
+    var g_mouseDownPos;//クリックした時のマウスの位置
+    var g_CursorPosX=0;//マウスの位置が盤のどのマス上にあるか(横軸)
+    var g_CursorPosY=0;//マウスの位置が盤のどのマス上にあるか(縦軸)
+    
+    var g_MyTurn = new Boolean(false); //手番権 Web側の手番ならtrue
+    var g_MyPieceColor = 2; ////Web側の駒色 　1:黒    2:白
+    var g_YourPieceColor = 1; ////基板側の駒色 　1:黒    2:白
+    
+    //resource内の画像を使うための処理
+    var g_white = new Image();
+    var g_black = new Image();
+    var g_mini_white = new Image();
+    var g_mini_black = new Image();
+    var g_cursor = new Image();
+    var g_turn = new Image();
+    var g_gauge = new Image();
+
+    g_white.src="resource/white.png";
+    g_black.src="resource/black.png";
+    g_mini_white.src="resource/mini_white.png";
+    g_mini_black.src="resource/mini_black.png";
+    g_cursor.src="resource/cursor.png";
+    g_turn.src="resource/turn.png";
+    g_gauge.src="resource/gauge.png";
+    
+    //コマ配置 0:空白     1:黒    2:白
+    var PieceAry = [
+                      [0,0,0,0,0,0,0,0], //y=0
+                      [0,0,0,0,0,0,0,0], 
+                      [0,0,0,0,0,0,0,0], 
+                      [0,0,0,2,1,0,0,0], 
+                      [0,0,0,1,2,0,0,0], 
+                      [0,0,0,0,0,0,0,0], 
+                      [0,0,0,0,0,0,0,0], 
+                      [0,0,0,0,0,0,0,0] //y=7
+                   ];
+                   
+    //グローバル変数ここまで               
+    
+    
+    //WebSocket関係ここから
+    var ws = null;　// WebSocketオブジェクト
+    
+    // 接続先URI(ここにWebSocketのURLを記述する)
+    var uri = "";
+    
+    //通信モジュールID(ここに通信モジュールのIDを記述する)
+    var module_id = "";
+    
+    
+    function wsbox(){
+     
+    }
+    
+    // 接続
+    function open() {
+        wsbox();
+        if (ws == null || ws.readyState != 1) {
+            // ws の初期化
+            ws = new WebSocket(uri);
+            // イベントハンドラの設定
+            ws.onopen = onOpen;
+            ws.onmessage = onMessage;
+            ws.onclose = onClose;
+            ws.onerror = onError;
+            //alert("接続処理実行");
+        }
+    }
+    
+    // メッセージ受信イベント
+    function onMessage(event) {
+        output(event.data);
+    }
+
+    // 接続イベント
+    function onOpen(event) {
+       SendModule(1);//画面を開くまたはF5キーで画面更新したら、通信モジュールに現在の盤情報を聞く
+    }
+    
+    // エラーイベント
+    function onError(event) {
+        document.getElementById('status').innerHTML='Error';
+    }
+
+    // 切断イベント
+    function onClose() {
+        ws.close();
+        ws = null;
+        document.getElementById('status').innerHTML='Close';
+        alert("切断しました");
+    }
+    
+    // WebSocket接続関数
+    function WSOpen() {
+        if(ws != null)
+        {
+            ws.close();
+            return;
+        }
+        setTimeout("open()", 0);
+        document.getElementById('status').innerHTML='Open';
+    }
+    
+    //WebSocket関係ここまで
+    
+    //モジュールに送信する処理
+    function SendModule(order) {
+	    if(ws==null)
+	    {
+	        alert("ws=null");
+	        return;//wsがnullなら処理を抜ける
+	    }
+	    
+	    var buf=order;
+	    var BoardPosition=10*g_CursorPosX+g_CursorPosY;
+	    var OrderText;
+	    
+	    if(buf<1)
+	    {
+	        buf=1;
+	    }else if(buf>2)
+	    {
+	        buf=2;
+	    }
+	    
+	    switch(buf)
+	    {
+	        case 1:
+	            OrderText="Web>現在の盤状態を教えて下さい。"
+	        break;
+	        
+    	    case 2:
+	            OrderText="Web>手を打ちます。"
+	        break;
+	        
+	        default:
+	        break;
+	    }
+              
+        //Web画面に送信ログ表示する。
+        if(g_Debug==true)
+        {
+            document.getElementById("messagelog").innerHTML = OrderText+" "+buf.toString() +" "+BoardPosition.toString() +" "+new Date().toLocaleString()+ "</br>"+ document.getElementById("messagelog").innerHTML;
+        }
+                                        
+        //JSON送信
+        const obj = 
+        {
+	        module: module_id ,
+	        type: 'channels',
+	        datetime: new Date().toISOString(),
+	        payload:{
+	                    channels: [
+	                               {channel: 0, type: 'i', value:buf},
+	                               {channel: 1, type: 'i', value:BoardPosition}
+	                              ]
+	                }
+	    };
+	    ws.send(JSON.stringify(obj));
+	}
+    
+    // 受信したメッセージを出力する処理
+    function output(str) {
+        
+        var order;
+        var MessageText;
+        
+        var MyTurnNum;
+        var MyPieceColor;
+        var BoardNumBuf = new Array(8);
+        
+        var contact = JSON.parse(str);
+        var now=new Date(contact.payload.channels[0].datetime);
+        
+        order=contact.payload.channels[10].value;//基板からの返答
+        if(order<1)
+	    {
+	        order=1;
+	    }else if(order>3)
+	    {
+	        order=3;
+	    }
+        
+        //盤のコマ配置情報
+        BoardNumBuf[0]=contact.payload.channels[0].value;
+        BoardNumBuf[1]=contact.payload.channels[1].value;
+        BoardNumBuf[2]=contact.payload.channels[2].value;
+        BoardNumBuf[3]=contact.payload.channels[3].value;
+        BoardNumBuf[4]=contact.payload.channels[4].value;
+        BoardNumBuf[5]=contact.payload.channels[5].value;
+        BoardNumBuf[6]=contact.payload.channels[6].value;
+        BoardNumBuf[7]=contact.payload.channels[7].value;
+        
+        MyTurnNum=contact.payload.channels[8].value;//基板からの返答 現在、基板の手番(1)かWebの手番(2)かを返す
+        MyPieceColor=contact.payload.channels[9].value;//基板からの返答 //基板側の駒色を返す //自分の駒色 　1:黒    2:白
+        
+        //コマ配置情報からPieceAryに変換する処理
+        //0:空白     1:黒    2:白
+        for(var y=0;y<8;y++)
+        {
+            PieceAry[y][0]=Math.floor(BoardNumBuf[y]/10000000)%10;
+            PieceAry[y][1]=Math.floor(BoardNumBuf[y]/1000000)%10;
+            PieceAry[y][2]=Math.floor(BoardNumBuf[y]/100000)%10;
+            PieceAry[y][3]=Math.floor(BoardNumBuf[y]/10000)%10;
+            PieceAry[y][4]=Math.floor(BoardNumBuf[y]/1000)%10;
+            PieceAry[y][5]=Math.floor(BoardNumBuf[y]/100)%10;
+            PieceAry[y][6]=Math.floor(BoardNumBuf[y]/10)%10;
+            PieceAry[y][7]=Math.floor(BoardNumBuf[y])%10;
+        }
+        
+        //手番変数処理
+        if(MyTurnNum==1)
+        {
+            g_MyTurn=false;
+        }else g_MyTurn=true;
+        
+        //コマ色処理
+        if(MyPieceColor==1)
+        {
+            g_MyPieceColor=2;
+            g_YourPieceColor=1;
+        }else
+        {
+            g_MyPieceColor=1;
+            g_YourPieceColor=2;
+        }
+        
+        //ゲーム終了フラグ処理
+        if(order==3)//基板からゲームが終了の信号が送られてきたら
+        {
+            g_GameEnd = true;//ゲームが終了かどうか判定 falseなら続行　trueなら終了
+        }else
+        {
+            g_GameEnd = false;
+        }
+        switch(order)
+        {
+            case 1:
+                MessageText="Module>現在の盤状態報告します。"
+            break;
+            
+            case 2:
+                MessageText="Module>ゲームリセットします。"
+            break;
+            
+            case 3:
+                MessageText="Module>ゲーム終了です。"
+            break;
+            
+            default:
+            break;
+        }
+       
+        if(g_Debug==true)
+        {
+            document.getElementById("messagelog").innerHTML='<font color="#4169e1">'+MessageText+"<br/>"+
+                                                             "更新時刻(JST)：" + new Date().toLocaleString()+ "<br />" +
+                                                             "更新時刻(UTC)：" + new Date().toISOString()+ "<br />" + "</font>"+
+                                                             "基板からの盤情報"+ "<br />" +
+                                                             ('00000000' + BoardNumBuf[0]).slice(-8).toString() +"<br />"+
+                                                             ('00000000' + BoardNumBuf[1]).slice(-8).toString() +"<br />"+
+                                                             ('00000000' + BoardNumBuf[2]).slice(-8).toString() +"<br />"+
+                                                             ('00000000' + BoardNumBuf[3]).slice(-8).toString() +"<br />"+
+                                                             ('00000000' + BoardNumBuf[4]).slice(-8).toString() +"<br />"+
+                                                             ('00000000' + BoardNumBuf[5]).slice(-8).toString() +"<br />"+
+                                                             ('00000000' + BoardNumBuf[6]).slice(-8).toString() +"<br />"+
+                                                             ('00000000' + BoardNumBuf[7]).slice(-8).toString() +"<br />"+"<br />"+                                                 
+                                                             "Web上で復号した盤情報"+ "<br />" +
+                                                             PieceAry[0][0].toString()+PieceAry[0][1].toString()+PieceAry[0][2].toString()+PieceAry[0][3].toString()+PieceAry[0][4].toString()+PieceAry[0][5].toString()+PieceAry[0][6].toString()+PieceAry[0][7].toString()+"<br />"+ 
+                                                             PieceAry[1][0].toString()+PieceAry[1][1].toString()+PieceAry[1][2].toString()+PieceAry[1][3].toString()+PieceAry[1][4].toString()+PieceAry[1][5].toString()+PieceAry[1][6].toString()+PieceAry[1][7].toString()+"<br />"+ 
+                                                             PieceAry[2][0].toString()+PieceAry[2][1].toString()+PieceAry[2][2].toString()+PieceAry[2][3].toString()+PieceAry[2][4].toString()+PieceAry[2][5].toString()+PieceAry[2][6].toString()+PieceAry[2][7].toString()+"<br />"+ 
+                                                             PieceAry[3][0].toString()+PieceAry[3][1].toString()+PieceAry[3][2].toString()+PieceAry[3][3].toString()+PieceAry[3][4].toString()+PieceAry[3][5].toString()+PieceAry[3][6].toString()+PieceAry[3][7].toString()+"<br />"+ 
+                                                             PieceAry[4][0].toString()+PieceAry[4][1].toString()+PieceAry[4][2].toString()+PieceAry[4][3].toString()+PieceAry[4][4].toString()+PieceAry[4][5].toString()+PieceAry[4][6].toString()+PieceAry[4][7].toString()+"<br />"+ 
+                                                             PieceAry[5][0].toString()+PieceAry[5][1].toString()+PieceAry[5][2].toString()+PieceAry[5][3].toString()+PieceAry[5][4].toString()+PieceAry[5][5].toString()+PieceAry[5][6].toString()+PieceAry[5][7].toString()+"<br />"+ 
+                                                             PieceAry[6][0].toString()+PieceAry[6][1].toString()+PieceAry[6][2].toString()+PieceAry[6][3].toString()+PieceAry[6][4].toString()+PieceAry[6][5].toString()+PieceAry[6][6].toString()+PieceAry[6][7].toString()+"<br />"+ 
+                                                             PieceAry[7][0].toString()+PieceAry[7][1].toString()+PieceAry[7][2].toString()+PieceAry[7][3].toString()+PieceAry[7][4].toString()+PieceAry[7][5].toString()+PieceAry[7][6].toString()+PieceAry[7][7].toString()+"<br />"+ 
+                                                             document.getElementById("messagelog").innerHTML;
+        }
+             
+        //ゲーム状態再描画                                    
+        BoardDraw(g_canvas);
+    }
+    
+    //盤上のカーソル描画
+    function CursorDraw(canvas)
+    {
+        var context=canvas.getContext('2d');
+        var X=-1;
+        var Y=-1;
+       
+        if(g_mousePos.x>OffSetX && g_mousePos.x<OffSetX+g_BOARD_SIZE && g_mousePos.y>OffSetY && g_mousePos.y<OffSetY+g_BOARD_SIZE)
+        {
+            X=(g_mousePos.x-OffSetX)/PieceSIZE;
+            Y=(g_mousePos.y-OffSetY)/PieceSIZE;
+            context.drawImage(g_cursor,OffSetX+Math.floor(X)*PieceSIZE,OffSetY+Math.floor(Y)*PieceSIZE);
+        }
+        g_CursorPosX=Math.floor(X);
+        g_CursorPosY=Math.floor(Y);
+        
+        var message='CursorPosX:' + g_CursorPosX + ', CursorPosY:' + g_CursorPosY;
+        context.font = '18pt "MSゴシック"';
+        context.fillStyle = 'black';
+        if(g_Debug==true) context.fillText(message, 10, 25);
+    }
+    
+    //コマ・コマ取得枚数描画
+    function PieceDraw(canvas)
+    {
+        var black_piece_count=CountBlackPiece();
+        var white_piece_count=CountWhitePiece();
+        
+        var context = canvas.getContext('2d');
+        //コマ配置
+        for(var y=0;y<8;y++)
+        {
+            for(var x=0;x<8;x++)
+            {
+                if(PieceAry[y][x]==1)//黒コマなら
+                {
+                    context.drawImage(g_black,OffSetX+x*PieceSIZE,OffSetY+y*PieceSIZE);
+                }else if(PieceAry[y][x]==2)//白コマなら
+                {
+                    context.drawImage(g_white,OffSetX+x*PieceSIZE,OffSetY+y*PieceSIZE);
+                }
+            }
+        }
+        
+        //コマ取得枚数用ゲージ描画
+        context.drawImage(g_gauge,540+20+g_MiniPieceSIZE_W+2,60);
+        
+        //コマ取得枚数描画
+        for(var i=0;i<black_piece_count;i++)//黒駒枚数描画
+        {
+            context.drawImage(g_mini_black,540+20,(OffSetY+g_BOARD_SIZE-g_MiniPieceSIZE_H)-i*(g_MiniPieceSIZE_H+2)-32);
+        }
+        
+        for(var i=0;i<white_piece_count;i++)//白駒枚数描画
+        {
+            context.drawImage(g_mini_white,540+2*20+g_MiniPieceSIZE_W,(OffSetY+g_BOARD_SIZE-g_MiniPieceSIZE_H)-i*(g_MiniPieceSIZE_H+2)-32);
+        }
+        
+        var message=black_piece_count.toString();
+        var metrics = context.measureText(message);
+        context.fillText(message, 540+20+30/2-metrics.width/2, OffSetY+g_BOARD_SIZE);
+        
+        message=white_piece_count.toString();
+        metrics = context.measureText(message);
+        context.fillText(message, 540+2*20+30+30/2-metrics.width/2, OffSetY+g_BOARD_SIZE);
+    }
+
+    //盤関係描画
+    function BoardDraw(canvas)
+    {
+        var context = g_canvas.getContext('2d');
+        
+        //キャンバスクリア
+        context.clearRect(0, 0, g_CANVAS_W, g_CANVAS_H);
+        
+        //キャンバスの枠線を描く
+        context.strokeRect(0, 0, g_CANVAS_W, g_CANVAS_H)
+      
+        //盤塗りつぶし
+        context.beginPath();
+        context.fillStyle="rgb(0,255,0)";
+        context.fillRect(OffSetX, OffSetY, g_BOARD_SIZE, g_BOARD_SIZE);
+        context.closePath();
+       
+        //枠線
+        context.fillStyle = "rgb(0, 0, 0)";
+        context.beginPath();
+        for(var i=0;i<9;i++)//横線
+        {
+            context.moveTo(OffSetX,OffSetY+PieceSIZE*i);
+            context.lineTo(OffSetX+g_BOARD_SIZE,OffSetY+PieceSIZE*i);
+            
+            context.moveTo(OffSetX+(g_BOARD_SIZE/8)*i,OffSetY);
+            context.lineTo(OffSetX+(g_BOARD_SIZE/8)*i,OffSetY+g_BOARD_SIZE);
+            
+        }
+        context.closePath();
+        context.stroke();
+        
+        //盤番号描画
+        context.font = '18pt "MSゴシック"';
+        context.fillStyle = 'black';
+        for(var i=0;i<8;i++)
+        {
+            context.fillText((i+1).toString(), 80+i*60, 50);
+        }
+        
+        for(var i=0;i<8;i++)
+        {
+            context.fillText((i+1).toString(), 35,100+i*60);
+        }
+        
+        
+        //コマ配置
+        PieceDraw(canvas);
+        
+        //手番描画
+        var message="わたし";
+        var metrics1 = context.measureText(message);
+        context.fillText(message,180-metrics1.width/2, OffSetY+g_BOARD_SIZE+40);
+        
+        message="あなた";
+        var metrics2 = context.measureText(message);
+        context.fillText(message, 420-metrics2.width/2, OffSetY+g_BOARD_SIZE+40);
+        
+        if(g_MyPieceColor==2) //Web側の駒色 　1:黒    2:白
+        {
+            context.drawImage(g_black,1.1*PieceSIZE,9*PieceSIZE);
+            context.drawImage(g_white,5.1*PieceSIZE,9*PieceSIZE);
+        }else if(g_MyPieceColor==1)
+        {
+            context.drawImage(g_white,1.1*PieceSIZE,9*PieceSIZE);
+            context.drawImage(g_black,5.1*PieceSIZE,9*PieceSIZE);
+        }
+        
+        //手番枠表示
+        if(g_GameEnd==false)
+        {
+            if(g_MyTurn==true)//手番権 Web側の手番ならtrue 基板側ならfalse
+            {
+                context.drawImage(g_turn,420-g_TurnSIZE_W/2, OffSetY+g_BOARD_SIZE+10);
+            }else
+            {
+                context.drawImage(g_turn,180-g_TurnSIZE_W/2, OffSetY+g_BOARD_SIZE+10);
+            }
+        }
+    }
+    
+    //黒コマの枚数をカウント
+    function CountBlackPiece()
+    {
+        var count=0;
+        //初期コマ配置
+        for(var y=0;y<8;y++)
+        {
+            for(var x=0;x<8;x++)
+            {
+                if(PieceAry[y][x]==1) count++;       
+            }
+        }
+        return count;
+    }
+    
+    //白コマの枚数をカウント
+    function CountWhitePiece()
+    {
+        var count=0;
+        //初期コマ配置
+        for(var y=0;y<8;y++)
+        {
+            for(var x=0;x<8;x++)
+            {
+                if(PieceAry[y][x]==2) count++;
+                
+            }
+        }
+        return count;
+    }
+    
+    //ゲーム初期化
+    function InitBoard(canvas)
+    {
+        var context = canvas.getContext('2d');
+        //初期コマ配置
+        for(var y=0;y<8;y++)
+        {
+            for(var x=0;x<8;x++)
+            {
+                PieceAry[y][x]=0;
+            }
+        }
+        PieceAry[3][3]=2;
+        PieceAry[4][4]=2;
+        PieceAry[3][4]=1;
+        PieceAry[4][3]=1;
+        
+        BoardDraw(canvas);
+        
+    }
+    
+    //マウスカーソルを動かしたときの描画処理
+    function PrintPosition(canvas, message)
+    {
+        var context = canvas.getContext('2d');
+        
+        //盤描画
+        BoardDraw(canvas);
+
+        //カーソル描画
+        CursorDraw(canvas);
+        
+        context.font = '18pt "MSゴシック"';
+        context.fillStyle = 'black';
+        if(g_Debug==true) context.fillText(message, 400, 25);
+    }
+    
+    //マス目をマウスクリックしたときの描画処理
+     function MouseDownPosition(canvas, message)
+    {
+        var context = canvas.getContext('2d');
+        
+        //盤描画
+        BoardDraw(canvas);
+
+        //カーソル描画
+        CursorDraw(canvas);
+        
+        context.font = '18pt "MSゴシック"';
+        context.fillStyle = 'black';
+        if(g_Debug==true) context.fillText(message, 400, 25);
+        
+        if(g_MyTurn==true)
+        {
+            if(DropPiece()>0)
+            {
+                PieceAry[g_CursorPosY][g_CursorPosX]=g_MyPieceColor;
+                BoardDraw(canvas);
+                SendModule(2);
+            }
+        }
+    }
+    
+    //大きい方の数値を返す
+    function MaxReturn(num1,num2)
+    {
+        if(num1>num2)
+        {
+            return num1;
+        }else return num2;
+    }
+
+    //小さい方の数値を返す
+    function MinReturn(num1,num2)
+    {
+        if(num1<num2)
+        {
+            return num1;
+        }else return num2;
+    }
+    
+    //コマを置くときの判定処理
+    //指し手が有効かどうか判定して、ひっくり返せるコマの枚数を返す(0なら無効な指し手。1以上なら有効な指し手)
+    function DropPiece()
+    {
+        var x=g_CursorPosX;
+        var y=g_CursorPosY;
+        if(x<0 || x>8 || y<0 || y>8 ) return 0;
+         
+        var MaxNumBuf=0;
+        var MinNumBuf=0;
+        var TurnPieceNum=0;
+
+        //もし既にコマが置かれていたら
+        if(PieceAry[y][x]==g_MyPieceColor || PieceAry[y][x]==g_YourPieceColor)
+        {
+            return 0;
+        }else
+        {
+            //右側探索
+            if(x<6)//xが0～5ならば
+            {
+                if(PieceAry[y][x+1]==g_YourPieceColor)//隣が相手コマだったら
+                {
+                    for(var i=x+2;i<8;i++)//2個目から探索開始
+                    {
+                        if(PieceAry[y][i]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            
+                            for(var j=x+1;j<i;j++)//ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[y][i]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            //左側探索
+            if(x>1) //xが2～7ならば
+            {
+                if(PieceAry[y][x-1]==g_YourPieceColor)//隣が相手コマだったら
+                {
+                    for(var i=x-2;i>=0;i--)//2個目から探索開始
+                    {
+                        if(PieceAry[y][i]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            for(var j=x-1;j>=i;j--)//ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[y][i]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            //下側探索
+            if(y<6)//yが0～5ならば
+            {
+                if(PieceAry[y+1][x]==g_YourPieceColor)//下が相手コマだったら
+                {
+                    for(var i=y+2;i<8;i++)//2個目から探索開始
+                    {
+                        if(PieceAry[i][x]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            for(var j=y+1;j<i;j++)//ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[i][x]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            //上側探索
+            if(y>1) //yが2～7ならば
+            {
+                if(PieceAry[y-1][x]==g_YourPieceColor)//隣が相手コマだったら
+                {
+                    for(var i=y-2;i>=0;i--)//2個目から探索開始
+                    {
+                        if(PieceAry[i][x]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            for(var j=y-1;j>=i;j--)//ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[i][x]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            //右下探索
+            if(x<6 && y<6)//xが0～5かつyが0～5ならば
+            {
+                MaxNumBuf=MaxReturn(x,y);
+                if(PieceAry[y+1][x+1]==g_YourPieceColor)//右下が相手コマだったら
+                {
+                    for(var i=2;i<8-MaxNumBuf;i++)//2個目から探索開始
+                    {
+                        if(PieceAry[y+i][x+i]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            for(var j=1;j<i;j++)////ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[y+i][x+i]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            //左上探索
+            if(x>1 && y>1)//xが2～7かつyが2～7ならば
+            {
+                MinNumBuf=MinReturn(x,y);
+                if(PieceAry[y-1][x-1]==g_YourPieceColor)//左上が相手コマだったら
+                {
+                    for(var i=2;i<=MinNumBuf;i++)//2個目から探索開始
+                    {
+                        if(PieceAry[y-i][x-i]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            for(var j=1;j<i;j++)////ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[y-i][x-i]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            //右上探索
+            if(x<6 && y>1)//xが0～5かつyが2～7ならば
+            {
+                MinNumBuf=MinReturn(7-x,y);
+                if(PieceAry[y-1][x+1]==g_YourPieceColor)//右上が相手コマだったら
+                {
+                    for(var i=2;i<=MinNumBuf;i++)//2個目から探索開始
+                    {
+                        if(PieceAry[y-i][x+i]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            for(var j=1;j<i;j++)////ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[y-i][x+i]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            //左下探索
+            if(x>1 && y<6)//xが2～7かつyが0～5ならば
+            {
+                MinNumBuf=MinReturn(x,7-y);
+                if(PieceAry[y+1][x-1]==g_YourPieceColor)//右上が相手コマだったら
+                {
+                    for(var i=2;i<=MinNumBuf;i++)//2個目から探索開始
+                    {
+                        if(PieceAry[y+i][x-i]==g_MyPieceColor)//自分の駒があったら
+                        {
+                            for(var j=1;j<i;j++)////ひっくり返せるコマの数をカウント
+                            {
+                                TurnPieceNum++;
+                            }
+                            break;
+                        }else if(PieceAry[y+i][x-i]==0)//空白があったら抜ける
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            return TurnPieceNum;
+        }
+    }
+    
+    //キャンバス上のマウス位置を計算(canvasの左上が(0,0))
+    function CalcMousePosition(canvas, event) 
+    {
+        var rect = canvas.getBoundingClientRect();
+        return {
+          x: Math.floor(event.clientX - rect.left),
+          y: Math.floor(event.clientY - rect.top)
+        };
+    }
+    
+    //最初の描画処理
+    function draw(){
+        var canvas = document.getElementById('disp');
+        var context = canvas.getContext('2d');
+
+        g_canvas = canvas;
+        g_context = canvas.getContext('2d');
+        
+        context.lineWidth = 1.0;
+        
+        //フォント変更
+        context.font = '18pt "MSゴシック"';
+        context.fillStyle = 'black';
+        
+        //盤描画
+        BoardDraw(canvas);
+        
+        //マウスポジション処理
+        canvas.addEventListener('mousemove', function (event) 
+        {
+            g_mousePos = CalcMousePosition(canvas, event);
+            var message = 'MousePosX:' + g_mousePos.x + ', MousePosY:' + g_mousePos.y;
+            PrintPosition(canvas, message);
+        }, false);
+        
+        //マウスクリック処理
+        canvas.addEventListener('mousedown', function (event) 
+        {
+            g_mouseDownPos = CalcMousePosition(canvas, event);
+            var message = 'MousePosX:' + g_mouseDownPos.x + ', MousePosY:' + g_mouseDownPos.y;
+            MouseDownPosition(canvas, message);
+        }, false);
+        
+        //canvas 保存
+        context.save();
+        g_context=context;
+    }
+    </script>
+<h3>sakura.io リバーシWeb</h3>
+<body onload=" WSOpen();draw()">
+<h3>WebSocket 接続状態 : <span id="status">Wait</span></h3>
+
+    <canvas id="disp" width="800" height="600">
+    </canvas>
+    <div id="messagelog">
+    </div>
+    
+<hr />
+(C)2018 Iseba's Labo<br/>
+</body>
+</html>
