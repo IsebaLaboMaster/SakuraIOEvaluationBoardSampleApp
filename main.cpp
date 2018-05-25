@@ -56,7 +56,8 @@ int main() {
         CTimerSample::New,
         CBME280Sample::New,
         CMPU9250Sample::New,
-        CGNSSXA1110Sample::New
+        CGNSSXA1110Sample::New,
+        CSakuraIOReversi::New
     };
     
     int NowSelectProgram=1;
@@ -113,7 +114,7 @@ int main() {
             Lcd.printf("App No.\n");
             Lcd.printf("%d",NowSelectProgram);
         }
-        wait(0.01);
+        wait(0.01f);
     }
     
     //NowSelectProgramに応じたオブジェクト作成し、そのポインタをpSakuraIOEvaluationBoardに格納

@@ -17,6 +17,7 @@ class CTimerSample;
 class CBME280Sample;
 class CMPU9250Sample;
 class CGNSSXA1110Sample;
+class CSakuraIOReversi;
 //クラス宣言ここまで
 
 /*
@@ -316,6 +317,84 @@ public:
     uint32_t NowOrder;//Webからの値を格納
     int NowMode;
     int BeforeMode;
+};
+
+//『sakura.io リバーシ』
+//
+//〇概要
+//・sakura.ioを使った、sakura.io検証用ボードとWeb側とで戦うリバーシ
+//
+//〇動作
+//ボタン操作は以下の通りになります。
+//SW1:手番の横軸座標選択ボタン。押下でカウントアップし、1～9まで変化します。9の次は1になります。
+//SW2:手番の縦軸座標選択ボタン。押下でカウントアップし、1～9まで変化します。9の次は1になります。
+//SW3:指し手決定ボタン。自分の手番の時で横軸(1～8) 縦軸(1～8)の時、盤に置ける有効な手だったらそこに石を置きます。
+//                  盤の座標を超えた場合(X,Y座標がどちらか9以上)、このSWは無効です。
+//SW4:初期設定用ボタン。(横軸,縦軸)を(9,9)に指定して押下するとsakura.io検証用ボード側を黒番にしてリセットします。
+//                  (横軸,縦軸)を(9,8)に指定して押下するとsakura.io検証用ボード側を白番にしてリセットします。
+//                  但し、使用sakura.ioポイント数は初期化されません。
+//                  盤内の座標数値(1,1)～(8,8)の時、このSWは無効です。
+//SW5:LCD点灯スイッチ(LCD側にスライドすると手番に関わらず常時点灯します)
+//SW6:未使用
+//
+//LCD1行目:左側の数値→手番の横軸座標 　右側の数値→手番の縦軸座標
+//LCD2行目:手番表示(My:こちら側の手番 You:相手側の手番)と、使用sakura.ioポイント数
+//LCDLED:SW5が消灯側(6側)の時、自分の手番の時点灯し、相手手番の時消灯します。
+//
+//盤座標指定ルール:左上を(1,1)、右下を(8,8)、横軸をX、縦軸をY軸とします。
+//
+
+class CSakuraIOReversi : public CSakuraIOEvaluationBoard
+{
+public:
+    CSakuraIOReversi();
+    virtual ~CSakuraIOReversi();
+    virtual void Run();
+    static CSakuraIOEvaluationBoard* New(){return new CSakuraIOReversi();}
+    
+    void EnqueueData(int32_t order);
+    void SakuraIOSendData();
+    void SakuraIOReceptionData();
+    
+    void InitPieceAry();//石配置初期化
+    void SetMyPiece(int mypiece);
+    void SwitchCheck();//スイッチ処理関数
+    void PieceAryChangeSendData();//PieceAryの配列データをPieceSendDataに変換
+    void CountUpAttackX();//攻め手X座標計算
+    void CountUpAttackY();//攻め手Y座標計算
+    void PrintLCD();//表示処理関係
+    void GameReset();//全変数初期化
+    
+    bool MyAttackExist();//自分の石を打てる場所があるかどうか調べる
+    bool YourAttackExist();//相手の石を打てる場所があるかどうか調べる
+    
+    //判定する石座標(x,y)と置く石の色put_piece_colorを指定。判定のみ使用する場合はjudgeはtrue 石をひっくり返す場合はfalseを指定
+    bool AttackJudge(int x,int y,int put_piece_color,bool judge);
+    bool EndGameJudge();//ゲームが終了しているかどうか判定 終了ならtrueを返す。ゲーム続行可能ならfalseを返す
+    
+    int MaxReturn(int num1,int num2);
+    int MinReturn(int num1,int num2);
+    
+    //こちらの攻め手座標
+    int MyAttackX;
+    int MyAttackY;
+    
+    int MyPiece;//自分の石色 　1:黒    2:白
+    int YourPiece;//相手の石色 MyPieceと逆の色にする。
+    int PieceAry[8][8];//ボードの状態を保存  //0:空白     1:黒    2:白
+    int32_t PieceSendData[8];//sakura.ioに送るために使用
+    int32_t ReceiveData[16];//sakura.ioからの受信用に使用
+    
+    //スイッチ処理用変数
+    int BeforeSW1,NowSW1;
+    int BeforeSW2,NowSW2;
+    int BeforeSW3,NowSW3;
+    int BeforeSW4,NowSW4;
+    int NowSW5;
+    int NowSW6;
+    
+    bool MyTurn;
+    bool debug;
 };
 
 /////////////////////////
