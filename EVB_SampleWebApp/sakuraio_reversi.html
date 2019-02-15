@@ -411,10 +411,15 @@
         //盤番号描画
         context.font = '18pt "MSゴシック"';
         context.fillStyle = 'black';
-        for(var i=0;i<8;i++)
-        {
-            context.fillText((i+1).toString(), 80+i*60, 50);
-        }
+        //X座標
+        context.fillText(("a").toString(), 80+0*60, 50);
+        context.fillText(("b").toString(), 80+1*60, 50);
+        context.fillText(("c").toString(), 80+2*60, 50);
+        context.fillText(("d").toString(), 80+3*60, 50);
+        context.fillText(("e").toString(), 80+4*60, 50);
+        context.fillText(("f").toString(), 80+5*60, 50);
+        context.fillText(("g").toString(), 80+6*60, 50);
+        context.fillText(("h").toString(), 80+7*60, 50);
         
         for(var i=0;i<8;i++)
         {
