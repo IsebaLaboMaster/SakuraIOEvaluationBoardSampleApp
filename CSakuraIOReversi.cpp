@@ -1,12 +1,21 @@
 #include "CSakuraIOEvaluationBoard.h"
 
 //石色定義
+#define BLANK_PIECE 0
 #define BLACK_PIECE 1
 #define WHITE_PIECE 2
 
+//AS-289R2オブジェクト定義
+AS289R2 tp(D1);
+
+//タイマー定義
+Timer mytimer;
+
 CSakuraIOReversi::CSakuraIOReversi()
 {
-    debug=false;//PCとシリアル通信する際はこれっをtrueにする
+    mytimer.start();
+    
+    debug=false;//PCとシリアル通信する際はこれをtrueにする
     
     Lcd.cls();//LCDディスプレイクリア
     InitPieceAry();//石初期配置
@@ -28,6 +37,7 @@ CSakuraIOReversi::CSakuraIOReversi()
     NowSW3=0;
     NowSW4=0;
     NowSW5=0;
+    NowSW6=0;
     BeforeSW1=0;
     BeforeSW2=0;
     BeforeSW3=0;
@@ -37,6 +47,12 @@ CSakuraIOReversi::CSakuraIOReversi()
     for(int i=0;i<16;i++)
     {
         ReceiveData[i]=0;
+    }
+    
+    //棋譜記録の初期化
+    for(int i=0;i<64;i++)
+    {
+        Record[i]=0;
     }
     
     PieceAryChangeSendData();//盤情報を送信データに変換
@@ -71,6 +87,7 @@ void CSakuraIOReversi::GameReset()
     NowSW3=0;
     NowSW4=0;
     NowSW5=0;
+    NowSW6=0;
     BeforeSW1=0;
     BeforeSW2=0;
     BeforeSW3=0;
@@ -80,6 +97,12 @@ void CSakuraIOReversi::GameReset()
     for(int i=0;i<16;i++)
     {
         ReceiveData[i]=0;
+    }
+    
+    //棋譜記録の初期化
+    for(int i=0;i<64;i++)
+    {
+        Record[i]=0;
     }
 }
 
@@ -130,7 +153,7 @@ void CSakuraIOReversi::InitPieceAry()
     {
         for(int x=0;x<8;x++)
         {
-            PieceAry[y][x]=0;
+            PieceAry[y][x]=BLANK_PIECE;
         }
     }
     
@@ -271,6 +294,8 @@ void CSakuraIOReversi::SakuraIOReceptionData()
             int y=ReceiveData[1]%10;
             if(AttackJudge(x,y,YourPiece,false)==true)
             {
+                AddRecord(YourPiece*100+(x+1)*10+y+1);//棋譜情報を記録
+                
                 MyTurn=true;//相手の手が有効手だったら次は自分の手番にする
                 if(MyAttackExist()==false)//但し、自分が打てる手が無かったら手番は相手に返す
                 {
@@ -418,6 +443,7 @@ void CSakuraIOReversi::SwitchCheck()
         {
             if(AttackJudge(MyAttackX-1,MyAttackY-1,MyPiece,false)==true)//石が置けたなら
             {
+                AddRecord(MyPiece*100+MyAttackX*10+MyAttackY);//棋譜情報を記録
                 MyAttackX=1;
                 MyAttackY=1;
                 MyTurn=false;//手番を相手にする
@@ -450,9 +476,12 @@ void CSakuraIOReversi::SwitchCheck()
     if(BeforeSW4==1 && NowSW4==0) //設定ボタン
     {
         int buf=MyAttackX*10+MyAttackY;
-        if(buf>88) //11～77ならば盤座標情報
+        if(buf>88) //11～88ならば盤座標情報 91以上はシステム用の数字
         {
-            if(buf==98) //ゲームリセットし、私の手番を白にする。
+            if(buf==91) //現在の盤情報をプリンタ出力
+            {
+                PrintOutAS289R2();
+            }else if(buf==98) //ゲームリセットし、私の手番を白にする。
             {
                 GameReset();
                 PieceAryChangeSendData();//盤情報を送信データに変換
@@ -483,12 +512,33 @@ void CSakuraIOReversi::SwitchCheck()
             LcdLED=0; //LCD_LED 点灯
         }
     }
+    
+    if(mysw6==1) //SW6 7側へ 定期更新ON
+    {
+        int val = mytimer.read();
+        if(val>=10)
+        {
+            EnqueueData(1);
+            SakuraIOSendData();
+            mytimer.reset();
+        }
+    }else //SW6 6側へ 定期更新OFF
+    {
+        mytimer.reset();
+    }
 }
 
 void CSakuraIOReversi::PrintLCD()
 {
     Lcd.cls();
-    Lcd.printf("X:%d Y:%d\r\n", MyAttackX,MyAttackY);
+    if(MyAttackX>=1 && MyAttackX<=8)
+    {
+        Lcd.printf("X:%s Y:%d\r\n", GetXCoordinateName(MyAttackX),MyAttackY);
+    }else
+    {
+        Lcd.printf("X:%d Y:%d\r\n", MyAttackX,MyAttackY);
+    }
+    
     if(MyTurn==true)
     {
         Lcd.printf("My %5d\r\n", sakuraioPoint);
@@ -526,6 +576,138 @@ void CSakuraIOReversi::Run()
     PrintLCD();
     wait(0.01f);
 } 
+
+//現在の盤状態をプリンタ出力
+void CSakuraIOReversi::PrintOutAS289R2()
+{
+    //プリンタシールド初期化
+    tp.initialize();
+    tp.setANKFont(AS289R2::ANK_24x24);
+    
+    //盤状態出力
+    tp.printf(" abcdefgh\r");
+    for(int y=0;y<8;y++)
+    {
+        for(int x=0;x<8;x++)
+        {
+            if(x==0)
+            {
+                char str[3]={};
+                sprintf(str,"%d",y+1);
+                tp.printf(str);
+            }
+            if(PieceAry[y][x]==BLANK_PIECE)
+            {
+                tp.printf(" ");
+            }else if(PieceAry[y][x]==BLACK_PIECE)
+            {
+                tp.printf("●");
+            }else if(PieceAry[y][x]==WHITE_PIECE)
+            {
+                tp.printf("○");
+            }
+            if(x==7)
+            {
+                tp.printf("\r");
+            }
+        }
+    }
+    tp.putLineFeed(1);//行間
+    
+    //手番印字
+    if(MyPiece==BLACK_PIECE)
+    {
+        tp.printf("●:わたし %d枚\r",PieceNum(BLACK_PIECE));
+        tp.printf("○:あなた方 %d枚\r",PieceNum(WHITE_PIECE));
+    }else
+    {
+        tp.printf("○:わたし %d枚\r",PieceNum(WHITE_PIECE));
+        tp.printf("●:あなた方 %d枚\r",PieceNum(BLACK_PIECE));
+    }
+    tp.putLineFeed(1);//行間
+    
+    //棋譜印字
+    for(int i=0;i<64;i++)
+    {
+        if(Record[i]/100==BLACK_PIECE)
+        {
+            tp.printf("%2d:● %s%d\r",i+1,GetXCoordinateName(Record[i]%100/10),Record[i]%10);
+        }else if(Record[i]/100==WHITE_PIECE)
+        {
+            tp.printf("%2d:○ %s%d\r",i+1,GetXCoordinateName(Record[i]%100/10),Record[i]%10);
+        }else//Record[i]の100の位がWHITE_PIECE,BLACK_PIECEいずれでもなかったら
+        {
+            //何もしない
+        }
+    }
+    tp.putLineFeed(5);//行間
+}
+
+//棋譜記録配列に座標情報を追加していく
+void CSakuraIOReversi::AddRecord(int record)
+{
+    for(int i=0;i<64;i++)
+    {
+        if(Record[i]==0)
+        {
+            Record[i]=record;
+            break;
+        }
+    }
+}
+
+int CSakuraIOReversi::PieceNum(int piece_color)
+{
+    int buf=0;
+    
+    //0:空白     1:黒    2:白
+    for(int y=0;y<8;y++)
+    {
+        for(int x=0;x<8;x++)
+        {
+            if(PieceAry[y][x]==piece_color)
+            {
+                buf++;
+            }
+        }
+    }
+    return buf;
+}
+
+//X座標の数値からA～Hに変換
+char* CSakuraIOReversi::GetXCoordinateName(int x)
+{
+    int buf=x%10;
+    switch(buf)
+    {
+    case 1:
+        return "a";
+        
+    case 2:
+        return "b";
+        
+    case 3:
+        return "c";
+        
+    case 4:
+        return "d";
+        
+    case 5:
+        return "e";
+        
+    case 6:
+        return "f";
+        
+    case 7:
+        return "g";
+        
+    case 8:
+        return "h";
+        
+    default:
+        return NULL;
+    }
+}
 
 //こちらの手番の石判定処理
 //判定する石座標(x,y)と置く石の色put_piece_colorを指定。判定のみ使用する場合はjudgeはtrue 石をひっくり返す場合はfalseを指定
