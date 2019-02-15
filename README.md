@@ -202,6 +202,7 @@ Web側のゲーム画面の説明は以下の画像を参照願います。
 ・ゲーム途中でF5キーを押下して画面を更新しても、最初は初期配置になりますが、すぐに検証用ボードと通信を行い、現在の盤状態になります。  
 
 ※白・黒番設定、ゲームのリセット、盤状態の管理等は全て検証用ボード側で管理しています。    
+また、ナダ電子株式会社製「AS-289R2」プリンタシールドをお持ちであれば棋譜を印刷できます。
 (詳細は「CSakuraIOEvaluationBoard.h」内の説明を熟読願います)  
 
 # ―プログラムソースコードについて―
@@ -226,6 +227,7 @@ mbed上でプログラムを使用して改造等する場合、以下のソー�
 ・BME280(<https://os.mbed.com/users/MACRUM/code/BME280/>)  
 ・gps(<https://os.mbed.com/teams/SAKURA-Internet/code/gps/>)  
 ・MPU9250\_SPI(<https://os.mbed.com/users/kylongmu/code/MPU9250_SPI/>)  
+・AS289R2(<https://os.mbed.com/users/MACRUM/code/AS289R2/>)  
 ・SakuraIO (<https://os.mbed.com/teams/SAKURA-Internet/code/SakuraIO/>)  
   
 以上、ソースコードとライブラリを追加した後にコンパイルすると検証用ボードに書き込むための実行ファイルが生成されます。
